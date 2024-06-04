@@ -26,11 +26,13 @@ public class MainTest extends AtlasMongoDBTest {
     /**
      * Set up a test database and a test atlas search index.
      * Note: MongoDB support suggested adding a majority write concern, which I did using &w=majority in the connection string. This did not affect the latency at all.
+     * As an alternative to using Testcontainers, you can also run this test with any other Atlas Local CLI instance with the same result.
      */
     @Before
     public void setup() {
-        System.out.println("Connecting to " + super.connectionString());
-        mongoClient = MongoClients.create(connectionString());
+        String connectionString = super.connectionString();
+        System.out.println("Connecting to " + connectionString);
+        mongoClient = MongoClients.create(connectionString);
         MongoDatabase testDB = mongoClient.getDatabase("test");
         testDB.createCollection("test");
         testCollection = testDB.getCollection("test", TestData.class);
