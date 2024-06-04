@@ -25,6 +25,7 @@ public class MainTest extends AtlasMongoDBTest {
 
     /**
      * Set up a test database and a test atlas search index.
+     * Note: MongoDB support suggested adding a majority write concern, which I did using &w=majority in the connection string. This did not affect the latency at all.
      */
     @Before
     public void setup() {
