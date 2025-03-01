@@ -1,19 +1,19 @@
 package com.mycodefu;
 
 import com.mongodb.client.*;
+import com.mongodb.client.model.search.SearchOperator;
+import com.mongodb.client.model.search.SearchOptions;
 import org.bson.BsonDocument;
 import org.bson.Document;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
-import org.testcontainers.containers.AtlasMongoDBTest;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 
+import static com.mongodb.client.model.Aggregates.search;
 import static com.mongodb.client.model.Filters.eq;
 import static org.junit.Assert.*;
 
@@ -94,7 +94,11 @@ public class MainTest extends AtlasMongoDBTest {
     @Test
     public void testAtlasSearchLatency() throws InterruptedException {
         Instant startTest = Instant.now();
-        for (int i = 0; i < 60; i++) {
+
+        int iterations = 60;
+        long totalTimeTakenMillis = 0;
+
+        for (int i = 0; i < iterations; i++) {
             System.out.println("Inserting document " + i);
 
             TestData testData = new TestData("test", i, i % 2 == 0);
@@ -114,16 +118,15 @@ public class MainTest extends AtlasMongoDBTest {
             //find using a search query
             TestData foundSearch = null;
             while(foundSearch == null) {
-                List<Document> query = Arrays.asList(new Document("$search",
-                                new Document("index", "AtlasSearchIndex")
-                                        .append("equals",
+                var query = search(
+                        SearchOperator.of(new Document("equals",
                                                 new Document()
-                                                        .append("path", "test2")
-                                                        .append("value", i)
-                                        )
-                        )
-                );
-                foundSearch = testCollection.aggregate(query).first();
+                                                    .append("path", "test2")
+                                                    .append("value", i)
+                                                )
+                        ), SearchOptions.searchOptions().index("AtlasSearchIndex"));
+
+                foundSearch = testCollection.aggregate(List.of(query)).first();
 
                 if (System.currentTimeMillis() - start > 10_000) {
                     fail("Search query took too long");
@@ -133,8 +136,14 @@ public class MainTest extends AtlasMongoDBTest {
             assertNotNull(foundSearch);
 
             //log time taken for the Atlas Search index to have the document
-            System.out.println("Time taken for search query to find document: " + (System.currentTimeMillis() - start) + "ms");
+            long timeTakenMillis = System.currentTimeMillis() - start;
+            totalTimeTakenMillis += timeTakenMillis;
+            System.out.println("Time taken for search query to find document: " + timeTakenMillis + "ms");
         }
+
         System.out.println("Time taken for test to run: " + Duration.between(startTest, Instant.now()).getSeconds() + "s");
+
+        long averageTimeTakenMillis = totalTimeTakenMillis / iterations;
+        System.out.println("Average time taken for search query to find document (and therefore implied indexing latency): " + averageTimeTakenMillis + "ms");
     }
 }

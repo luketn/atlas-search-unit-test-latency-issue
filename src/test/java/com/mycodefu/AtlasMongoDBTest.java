@@ -1,6 +1,7 @@
-package org.testcontainers.containers;
+package com.mycodefu;
 
 import org.slf4j.Logger;
+import org.testcontainers.mongodb.MongoDBAtlasLocalContainer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -8,52 +9,37 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 
-import static org.junit.Assert.assertTrue;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * A base class you can extend in tests to run against an Atlas Local Development Environment.
- * Ref: https://github.com/mongodb/mongodb-atlas-cli/blob/master/internal/cli/deployments/setup.go
  */
 public abstract class AtlasMongoDBTest {
     private static final Logger log = getLogger(AtlasMongoDBTest.class);
 
-    private static final Network network = Network.newNetwork();
-    static MongoDAtlasContainer mongoDAtlas = new MongoDAtlasContainer("7.0-ubi8")
-            .withLogConsumer(outputFrame -> log.debug("mongod: {}", outputFrame.getUtf8String()))
-            .withNetwork(network);
-
-    static MongoTAtlasContainer mongoTAtlas = new MongoTAtlasContainer()
-            .withLogConsumer(outputFrame -> log.debug("mongot: {}", outputFrame.getUtf8String()))
-            .withNetwork(network);
+    static MongoDBAtlasLocalContainer mongoDAtlas = new MongoDBAtlasLocalContainer("mongodb/mongodb-atlas-local")
+            .withLogConsumer(outputFrame -> log.debug("mongod: {}", outputFrame.getUtf8String()));
 
     // Singleton pattern Ref: https://java.testcontainers.org/test_framework_integration/manual_lifecycle_control/#singleton-containers
     static {
         try {
             Instant start = Instant.now();
 
+            // Applying patch for MacOS Sequoia bug
+            // ref: https://medium.com/@luketn/java-on-docker-sigill-exception-on-mac-os-sequoia-15-2-9311e4775442
+            String operatingSystemName = System.getProperty("os.name");
+            if (operatingSystemName.toLowerCase().contains("mac")) {
+                mongoDAtlas.withEnv("JAVA_TOOL_OPTIONS", "-XX:UseSVE=0");
+            }
+
             log.debug("starting mongod...");
             mongoDAtlas.start();
             log.debug("mongod started, connection string: {}", mongoDAtlas.getConnectionString());
-
-            log.debug("starting mongot...");
-            mongoTAtlas.start();
-            log.debug("mongot started");
-
-            log.debug("waiting for mongod to see mongot is steady...");
-            mongoDAtlas.waitForMongoTSteadyState();
-            log.debug("mongod sees mongot in steady state");
-
-            log.debug("pinging mongot from mongod...");
-            boolean successResponse = mongoDAtlas.waitUntilMongoTPingSucceeds(Duration.ofSeconds(5));
-            assertTrue("mongod could not ping mongot", successResponse);
-            log.debug("mongod can ping mongot");
 
             //Check logs
             if (log.isTraceEnabled()) {
                 try {
                     Files.writeString(Paths.get("./mongod-init-log.txt"), mongoDAtlas.getLogs());
-                    Files.writeString(Paths.get("./mongot-init-log.txt"), mongoTAtlas.getLogs());
                 } catch (IOException e) {
                     log.trace("An error occurred while writing mongod and mongot logs", e);
                 }
